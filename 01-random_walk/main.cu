@@ -12,6 +12,13 @@ void handle_error(cudaError_t err, int line) {
 
 __global__
 void reset_kernel(struct walker *walkers_dev, int walker_count, float *distances_dev) {
+    int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+    if (idx < walker_count) {
+        walkers_dev[idx].x = 0.0;
+        walkers_dev[idx].y = 0.0;
+        distances_dev[idx] = 0.0;
+    }
 }
 
 __global__
