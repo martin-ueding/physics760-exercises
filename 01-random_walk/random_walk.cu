@@ -58,6 +58,7 @@ void random_walk_kernel(int walker_count, int steps, int *walkers, float *distan
 
     walkers[idx] = x;
     walkers[idx + 1] = y;
+    curand_states[idx] = state;
 
     float square_distance = x*x + y*y;
 
