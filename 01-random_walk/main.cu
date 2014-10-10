@@ -1,9 +1,11 @@
 // Copyright © 2014 Martin Ueding <dev@martin-ueding.de>
 
+#include "random_walk.h"
+
 #include <assert.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 void handle_error(cudaError_t err, int line) {
     if (err != cudaSuccess) {
@@ -12,54 +14,56 @@ void handle_error(cudaError_t err, int line) {
     }
 }
 
-/**
-  Performs a random walk.
 
-  @param[in] walker_count Number of walkers in the array.
-  @param[in] steps Number of steps.
-  @param[out] distances_dev Distances the walkers have travelled.
-  */
-__global__
-void random_walk_kernel(int walker_count, int steps, float *distances_dev) {
-    int idx = threadIdx.x + blockDim.x * blockIdx.x;
+void plot_histogram(int bin_count, int walker_count, float *distances) {
+    int *bins = (int *) malloc(sizeof(int) * bin_count);
 
-    if (idx >= walker_count) {
-        return;
+    for (int bin_idx = 0; bin_idx != bin_count; bin_idx++) {
+        bins[bin_idx] = 0;
     }
 
-    // Copy variables into a local register to avoid costly global memory
-    // accesses.
-    int x = 0;
-    int y = 0;
+    float max = 0.0;
 
-    for (int step = 0; step != steps; step++) {
-        int random = 0; // TODO
-
-        // XXX This is probably a bad implementation since a lot of branching will
-        // slow it down.
-        if (random == 0) {
-            x++;
-        }
-        else if (random == 1) {
-            x--;
-        }
-        else if (random == 2) {
-            y++;
-        }
-        else if (random == 3) {
-            y--;
+    for (int walker = 0; walker != walker_count; walker++) {
+        if (distances[walker] > max) {
+            max = distances[walker];
         }
     }
 
-    float square_distance = x*x + y*y;
+    for (int walker = 0; walker != walker_count; walker++) {
+        int bin_idx = distances[walker] * bin_count / max;
+        if (bin_idx >= bin_count) {
+            bin_idx = bin_count - 1;
+        }
+        bins[bin_idx]++;
+    }
 
-    //distances_dev[idx] = sqrt(square_distance);
-    distances_dev[idx] = square_distance;
+    free(distances);
+
+    int slot_max = 0;
+
+    for (int bin_idx = 0; bin_idx != bin_count; bin_idx++) {
+        if (bins[bin_idx] > slot_max) {
+            slot_max = bins[bin_idx];
+        }
+    }
+
+    for (int bin_idx = 0; bin_idx != bin_count; bin_idx++) {
+        printf("%10f ", bin_idx * max / bin_count);
+
+        for (int slot_idx = 0; slot_idx != bins[bin_idx] * 50 / slot_max; slot_idx++) {
+            printf("#");
+        }
+        printf("\n");
+    }
+
+    free(bins);
 }
 
 int main(int argc, char **argv) {
-    int walker_count = 30;
-    int steps = 1;
+    int walker_count = 100000;
+    int steps = 2000;
+    int bin_count = 30;
     cudaError_t err;
 
 
@@ -75,8 +79,9 @@ int main(int argc, char **argv) {
 
     int block_size = 256;
 
-    //random_walk_kernel<<< walker_count/block_size, block_size >>>(
-    random_walk_kernel<<< 1, walker_count >>>(
+    clock_t start = clock();
+
+    random_walk_kernel<<< (walker_count-1)/block_size + 1, block_size >>>(
             walker_count,
             steps,
             distances_dev
@@ -85,10 +90,19 @@ int main(int argc, char **argv) {
     // Copy the results back to the host.
     err = cudaMemcpy(distances_host, distances_dev, distances_size, cudaMemcpyDeviceToHost);
     handle_error(err, __LINE__);
+    cudaFree(distances_dev);
 
+    clock_t end = clock();
+
+    printf("The part on the GPU for %d walkers for %d steps took %g seconds.\n", walker_count, steps, (end-start) / (float) CLOCKS_PER_SEC);
+
+    /*
     for (int walker = 0; walker != walker_count; walker++) {
         printf("%g\n", distances_host[walker]);
     }
+    */
+
+    plot_histogram(bin_count, walker_count, distances_host);
 
     return 0;
 }

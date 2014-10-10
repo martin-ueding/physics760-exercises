@@ -14,4 +14,5 @@ cuda_add_executable(
     random-walk
 
     main.cu
+    random_walk.cu
     )
