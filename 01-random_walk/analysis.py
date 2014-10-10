@@ -18,7 +18,11 @@ def main():
     pl.loglog(rms[:, 0], rms[:, 1], marker='.', linestyle='none', label='RMS')
     pl.grid(True)
     pl.legend(loc='best')
+    pl.title('Distance to the origin for 2D random walk')
+    pl.xlabel('Steps')
+    pl.ylabel('Distance')
     pl.savefig('plot.pdf')
+    pl.savefig('plot.png')
 
 def _parse_args():
     '''
