@@ -2,8 +2,6 @@
 
 #include "random_walk.h"
 
-#include <curand_kernel.h>
-
 #include <math.h>
 
 __global__
@@ -37,6 +35,10 @@ void random_walk_kernel(int walker_count, int steps, int *walkers, float *distan
 
     for (int step = 0; step != steps; step++) {
         int random = curand(&state) % 4;
+
+        if (random < 0) {
+            random = -random;
+        }
 
         // XXX This is probably a bad implementation since a lot of branching
         // will slow it down.

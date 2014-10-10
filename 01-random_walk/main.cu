@@ -68,6 +68,15 @@ double compute_average(float *data, int count) {
     return sum / count;
 }
 
+double compute_rms(float *data, int count) {
+    double sum = 0.0;
+    for (int idx = 0; idx != count; idx++) {
+        sum += data[idx] * data[idx];
+    }
+
+    return sqrt(sum / count);
+}
+
 int main(int argc, char **argv) {
     int walker_count = 1000;
     int bin_count = 30;
@@ -101,7 +110,7 @@ int main(int argc, char **argv) {
     int steps_per_iter = 100;
 
     FILE *averages_stream = fopen("averages.csv", "w");
-    assert(averages_stream);
+    FILE *rms_stream = fopen("rms.csv", "w");
 
     int iter_count = 100;
 
@@ -123,6 +132,7 @@ int main(int argc, char **argv) {
         clock_t end = clock();
 
         double average = compute_average(distances_host, walker_count);
+        double rms = compute_rms(distances_host, walker_count);
 
         if (iter == iter_count - 1) {
             printf("The part on the GPU for %d walkers for %d steps took %g seconds.\n", walker_count, iter * steps_per_iter, (end-start) / (float) CLOCKS_PER_SEC);
@@ -132,10 +142,12 @@ int main(int argc, char **argv) {
         }
 
         fprintf(averages_stream, "%d %f\n", iter * steps_per_iter, average);
+        fprintf(rms_stream, "%d %f\n", iter * steps_per_iter, rms);
     }
 
 
     fclose(averages_stream);
+    fclose(rms_stream);
 
     free(distances_host);
     cudaFree(distances_dev);
