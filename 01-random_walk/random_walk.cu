@@ -26,12 +26,11 @@ void random_walk_kernel(int walker_count, int steps, int *walkers, float *distan
         return;
     }
 
-    curandState_t state = curand_states[idx];
-
-    // Copy variables into a local register to avoid costly global memory
-    // accesses.
+    // Copy variables into a local register to avoid costly global device
+    // memory accesses.
     int x = walkers[idx];
     int y = walkers[idx + 1];
+    curandState_t state = curand_states[idx];
 
     for (int step = 0; step != steps; step++) {
         int random = curand(&state) % 4;
@@ -56,11 +55,12 @@ void random_walk_kernel(int walker_count, int steps, int *walkers, float *distan
         }
     }
 
+    // Store variables in global device memory again.
     walkers[idx] = x;
     walkers[idx + 1] = y;
     curand_states[idx] = state;
 
+    // Compute the distance and store that in global device memory.
     float square_distance = x*x + y*y;
-
     distances_dev[idx] = sqrt(square_distance);
 }
