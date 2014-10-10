@@ -7,27 +7,39 @@
 #include <math.h>
 
 __global__
-void random_walk_kernel(int walker_count, int steps, float *distances_dev) {
+void init_kernel(int walker_count, int *walkers, float *distances_dev, curandState_t * curand_states) {
     int idx = threadIdx.x + blockDim.x * blockIdx.x;
 
     if (idx >= walker_count) {
         return;
     }
 
-    curandState_t state;
+    walkers[idx] = 0.0;
+    walkers[idx + 1] = 0.0;
 
-    curand_init(0, idx, 0, &state);
+    curand_init(0, idx, 0, curand_states + idx);
+}
+
+__global__
+void random_walk_kernel(int walker_count, int steps, int *walkers, float *distances_dev, curandState_t * curand_states) {
+    int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+    if (idx >= walker_count) {
+        return;
+    }
+
+    curandState_t state = curand_states[idx];
 
     // Copy variables into a local register to avoid costly global memory
     // accesses.
-    int x = 0;
-    int y = 0;
+    int x = walkers[idx];
+    int y = walkers[idx + 1];
 
     for (int step = 0; step != steps; step++) {
         int random = curand(&state) % 4;
 
-        // XXX This is probably a bad implementation since a lot of branching will
-        // slow it down.
+        // XXX This is probably a bad implementation since a lot of branching
+        // will slow it down.
         if (random == 0) {
             x++;
         }
@@ -41,6 +53,9 @@ void random_walk_kernel(int walker_count, int steps, float *distances_dev) {
             y--;
         }
     }
+
+    walkers[idx] = x;
+    walkers[idx + 1] = y;
 
     float square_distance = x*x + y*y;
 

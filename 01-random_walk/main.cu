@@ -38,7 +38,6 @@ void plot_histogram(int bin_count, int walker_count, float *distances) {
         bins[bin_idx]++;
     }
 
-    free(distances);
 
     int slot_max = 0;
 
@@ -49,7 +48,7 @@ void plot_histogram(int bin_count, int walker_count, float *distances) {
     }
 
     for (int bin_idx = 0; bin_idx != bin_count; bin_idx++) {
-        printf("%10f ", bin_idx * max / bin_count);
+        printf("%10.1f ", bin_idx * max / bin_count);
 
         for (int slot_idx = 0; slot_idx != bins[bin_idx] * 50 / slot_max; slot_idx++) {
             printf("#");
@@ -60,9 +59,17 @@ void plot_histogram(int bin_count, int walker_count, float *distances) {
     free(bins);
 }
 
+double compute_average(float *data, int count) {
+    double sum = 0.0;
+    for (int idx = 0; idx != count; idx++) {
+        sum += data[idx];
+    }
+
+    return sum / count;
+}
+
 int main(int argc, char **argv) {
-    int walker_count = 100000;
-    int steps = 2000;
+    int walker_count = 1000;
     int bin_count = 30;
     cudaError_t err;
 
@@ -77,32 +84,63 @@ int main(int argc, char **argv) {
     err = cudaMalloc(&distances_dev, distances_size);
     handle_error(err, __LINE__);
 
+    int *walkers_dev;
+    err = cudaMalloc(&walkers_dev, sizeof(*walkers_dev) * 2 * walker_count);
+    handle_error(err, __LINE__);
+
+    curandState_t *curand_states_dev;
+    err = cudaMalloc(&curand_states_dev, sizeof(*curand_states_dev) * walker_count);
+    handle_error(err, __LINE__);
+
     int block_size = 256;
 
-    clock_t start = clock();
 
-    random_walk_kernel<<< (walker_count-1)/block_size + 1, block_size >>>(
-            walker_count,
-            steps,
-            distances_dev
-            );
+    init_kernel<<< (walker_count-1)/block_size + 1, block_size >>>(
+            walker_count, walkers_dev, distances_dev, curand_states_dev);
 
-    // Copy the results back to the host.
-    err = cudaMemcpy(distances_host, distances_dev, distances_size, cudaMemcpyDeviceToHost);
-    handle_error(err, __LINE__);
-    cudaFree(distances_dev);
+    int steps_per_iter = 100;
 
-    clock_t end = clock();
+    FILE *averages_stream = fopen("averages.csv", "w");
+    assert(averages_stream);
 
-    printf("The part on the GPU for %d walkers for %d steps took %g seconds.\n", walker_count, steps, (end-start) / (float) CLOCKS_PER_SEC);
+    int iter_count = 100;
 
-    /*
-    for (int walker = 0; walker != walker_count; walker++) {
-        printf("%g\n", distances_host[walker]);
+    for (int iter = 0; iter != iter_count; iter++) {
+        clock_t start = clock();
+
+        random_walk_kernel<<< (walker_count-1)/block_size + 1, block_size >>>(
+                walker_count,
+                steps_per_iter,
+                walkers_dev,
+                distances_dev,
+                curand_states_dev
+                );
+
+        // Copy the results back to the host.
+        err = cudaMemcpy(distances_host, distances_dev, distances_size, cudaMemcpyDeviceToHost);
+        handle_error(err, __LINE__);
+
+        clock_t end = clock();
+
+        double average = compute_average(distances_host, walker_count);
+
+        if (iter == iter_count - 1) {
+            printf("The part on the GPU for %d walkers for %d steps took %g seconds.\n", walker_count, iter * steps_per_iter, (end-start) / (float) CLOCKS_PER_SEC);
+
+            plot_histogram(bin_count, walker_count, distances_host);
+            printf("\n");
+        }
+
+        fprintf(averages_stream, "%d %f\n", iter * steps_per_iter, average);
     }
-    */
 
-    plot_histogram(bin_count, walker_count, distances_host);
+
+    fclose(averages_stream);
+
+    free(distances_host);
+    cudaFree(distances_dev);
+    cudaFree(curand_states_dev);
+    cudaFree(walkers_dev);
 
     return 0;
 }
