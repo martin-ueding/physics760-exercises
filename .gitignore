@@ -1,2 +1,6 @@
-01-random_walk/CMakeCache.txt
-01-random_walk/CMakeFiles/
+CMakeCache.txt
+CMakeFiles/
+*.tar.gz
+README.html
+plot.pdf
+plot.png
